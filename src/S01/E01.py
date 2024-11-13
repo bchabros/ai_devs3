@@ -20,7 +20,9 @@ async def extract_question(page_content: str) -> str:
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "system", "content": prompt},]
+        messages=[
+            {"role": "system", "content": prompt},
+        ],
     )
 
     return response.choices[0].message.content
@@ -36,7 +38,9 @@ async def answer_question(question: str):
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "system", "content": prompt},]
+        messages=[
+            {"role": "system", "content": prompt},
+        ],
     )
 
     return response.choices[0].message.content

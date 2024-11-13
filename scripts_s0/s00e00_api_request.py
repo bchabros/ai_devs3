@@ -22,16 +22,11 @@ def get_data_from_website():
 
 # Function to send POST request
 def send_post_request(data):
-    headers = {
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "task": TASK_NAME,
-        "apikey": API_KEY,
-        "answer": data
-    }
+    headers = {"Content-Type": "application/json"}
+    payload = {"task": TASK_NAME, "apikey": API_KEY, "answer": data}
     response = requests.post(ENDPOINT, headers=headers, data=json.dumps(payload))
     return response
+
 
 # Main execution
 try:

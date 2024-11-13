@@ -18,10 +18,7 @@ async def extract_question(page_content: str) -> str:
     response = anthropic.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=100,
-        messages=[{
-            "role": "user",
-            "content": prompt
-        }]
+        messages=[{"role": "user", "content": prompt}],
     )
 
     return response.content[0].text
@@ -40,10 +37,7 @@ async def answer_question(question: str) -> str:
     response = anthropic.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=10,
-        messages=[{
-            "role": "user",
-            "content": prompt
-        }]
+        messages=[{"role": "user", "content": prompt}],
     )
 
     return response.content[0].text

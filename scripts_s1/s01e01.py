@@ -2,7 +2,7 @@ import os
 import asyncio
 import httpx
 from bs4 import BeautifulSoup
-from src.S01E01 import extract_question, answer_question
+from src.S01.E01 import extract_question, answer_question
 
 
 async def main():
@@ -29,13 +29,13 @@ async def main():
                 data={
                     "username": os.getenv("S01E01_USERNAME"),
                     "password": os.getenv("S01E01_PASSWORD"),
-                    "answer": answer
+                    "answer": answer,
                 },
             )
             login_response.raise_for_status()
 
             # Get firmware page content
-            firmware_url = base_url.rstrip('/') + '/firmware'
+            firmware_url = base_url.rstrip("/") + "/firmware"
             firmware_response = await client.get(firmware_url)
             firmware_response.raise_for_status()
 
@@ -43,11 +43,11 @@ async def main():
             print(firmware_response.text)
 
             # Parse HTML to find download link
-            soup = BeautifulSoup(firmware_response.text, 'html.parser')
-            download_link = soup.find('a', href=True)
+            soup = BeautifulSoup(firmware_response.text, "html.parser")
+            download_link = soup.find("a", href=True)
 
             if download_link:
-                file_url = base_url.rstrip('/') + download_link['href']
+                file_url = base_url.rstrip("/") + download_link["href"]
                 print(f"\nDownloading file from: {file_url}")
 
                 # Download the file
@@ -55,10 +55,10 @@ async def main():
                 file_response.raise_for_status()
 
                 # Get the filename from the URL
-                filename = download_link['href'].split('/')[-1]
+                filename = download_link["href"].split("/")[-1]
 
                 # Save the file
-                with open(filename, 'wb') as f:
+                with open(filename, "wb") as f:
                     f.write(file_response.content)
 
                 print(f"File saved as: {filename}")
@@ -66,7 +66,9 @@ async def main():
                 print(file_response.text)
 
                 # Extract flag
-                flag_element = soup.find('h2', style="background:#f4ffaa;font-family:monospace")
+                flag_element = soup.find(
+                    "h2", style="background:#f4ffaa;font-family:monospace"
+                )
                 if flag_element:
                     print("\nFlag found:")
                     print(flag_element.text)
