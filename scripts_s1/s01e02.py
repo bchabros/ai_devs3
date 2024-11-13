@@ -2,7 +2,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from src.S01.E02 import RobotVerification
+from src.s_01.e_02 import RobotVerification
 
 
 async def main():

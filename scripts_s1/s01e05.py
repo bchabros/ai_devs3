@@ -9,7 +9,7 @@ from langfuse.decorators import observe
 
 from src.poligon import send
 
-from src.S01.E05 import CensoredData, ModelProvider
+from src.s_01.e_05 import CensoredData, ModelProvider
 
 load_dotenv()
 

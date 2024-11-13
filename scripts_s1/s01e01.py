@@ -2,7 +2,7 @@ import os
 import asyncio
 import httpx
 from bs4 import BeautifulSoup
-from src.S01.E01 import extract_question, answer_question
+from src.s_01.e_01 import extract_question, answer_question
 
 
 async def main():
