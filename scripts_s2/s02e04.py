@@ -37,17 +37,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-# answer
-# json_var = {
-#     'people': [
-#         '2024-11-12_report-00-sektor_C4.txt',
-#         '2024-11-12_report-10-sektor-C1.mp3',
-#         '2024-11-12_report-07-sektor_C4.txt'
-#     ],
-#     'hardware': [
-#         '2024-11-12_report-13.png',
-#         '2024-11-12_report-15.png',
-#         '2024-11-12_report-17.png'
-#     ]
-# }
