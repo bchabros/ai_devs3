@@ -1,8 +1,10 @@
 import json
 
 import requests
+from langfuse.decorators import observe, langfuse_context
 from openai import OpenAI
 import logging
+
 
 class ImageGenerator:
     def __init__(self, api_key: str) -> None:
@@ -34,7 +36,7 @@ class ImageGenerator:
             data = json.loads(response.text)
 
             # Extract description
-            description = data.get('description', '')
+            description = data.get("description", "")
 
             self.logger.info(f"Extracted description: {description}")
 
@@ -47,17 +49,17 @@ class ImageGenerator:
             self.logger.error(f"Error parsing JSON: {e}")
             raise
 
-
+    @observe(as_type="generation")
     def generate_image(self, prompt: str) -> str:
         """
-         Generate image using DALL-E 3
+        Generate image using DALL-E 3
 
-         Args:
-             prompt (str): The text prompt for image generation
+        Args:
+            prompt (str): The text prompt for image generation
 
-         Returns:
-             str: URL of the generated image
-         """
+        Returns:
+            str: URL of the generated image
+        """
         try:
             response = self.client.images.generate(
                 model="dall-e-3",
@@ -67,13 +69,19 @@ class ImageGenerator:
                 n=1,
             )
 
+            langfuse_context.update_current_observation(
+                usage={
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                }
+            )
+
             self.logger.info("Done generating image")
             return response.data[0].url
 
         except Exception as e:
             self.logger.error(f"Error generating image: {e}")
             raise
-
 
     def process(self, url: str) -> str:
         """

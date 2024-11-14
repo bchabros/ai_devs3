@@ -6,6 +6,7 @@ import requests
 import logging
 from dotenv import load_dotenv
 from anthropic import Anthropic
+from langfuse.decorators import observe, langfuse_context
 
 
 class ModelProvider(Enum):
@@ -77,10 +78,10 @@ Here's the text: {text}
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.FileHandler("censorship.log"), logging.StreamHandler()],
         )
         return logging.getLogger(__name__)
 
+    @observe()
     def download_text(self, url: str) -> str:
         """
         Download text from given URL.
@@ -101,6 +102,7 @@ Here's the text: {text}
         self.logger.info(f"Successfully downloaded text: {text}")
         return text
 
+    @observe(as_type="generation")
     def censor_text_anthropic(
         self, text: str, model: str = "claude-3-haiku-20240307"
     ) -> str:
@@ -116,14 +118,36 @@ Here's the text: {text}
         """
         self.logger.info("Starting Anthropic text censorship process")
         context = self.context_template.format(text=text)
+
+        # Update Langfuse with input parameters before the API call
+        langfuse_context.update_current_observation(
+            input=context,
+            model=model,
+            metadata={
+                "provider": "anthropic",
+                "model": model,
+                "input_length": len(text),
+            },
+        )
+
         message = self.client.messages.create(
             model=model,
             max_tokens=1000,
             messages=[{"role": "user", "content": context}],
         )
+
+        langfuse_context.update_current_observation(
+            usage={
+                "input": message.usage.input_tokens,
+                "output": message.usage.output_tokens,
+                "total": message.usage.input_tokens + message.usage.output_tokens,
+            }
+        )
         censored_text = message.content[0].text
+
         return censored_text
 
+    @observe(as_type="generation")
     def censor_text_ollama(self, text: str, model: str = "") -> str:
         """
         Use Ollama to censor personal information in text.
@@ -138,6 +162,13 @@ Here's the text: {text}
         self.logger.info("Starting Ollama text censorship process")
         context = self.context_template.format(text=text)
 
+        # Update Langfuse with input parameters
+        langfuse_context.update_current_observation(
+            input=context,
+            model=model,
+            metadata={"provider": "ollama", "model": model, "input_length": len(text)},
+        )
+
         response = requests.post(
             f"{self.ollama_base_url}/api/generate",
             json={"model": model, "prompt": context, "stream": False},
@@ -145,7 +176,19 @@ Here's the text: {text}
         response.raise_for_status()
 
         result = response.json()
+
+        # Update Langfuse with the response
+        langfuse_context.update_current_observation(
+            output=result["response"],
+            metadata={
+                "status_code": response.status_code,
+                "response_time": response.elapsed.total_seconds(),
+            },
+        )
+
         return result["response"]
+
+    observe()
 
     def censor_text(self, text: str, model: Optional[str] = None) -> str:
         """
@@ -160,6 +203,11 @@ Here's the text: {text}
         """
         self.logger.info(
             f"Starting text censorship process using {self.provider.value}"
+        )
+
+        # Update Langfuse with general process information
+        langfuse_context.update_current_observation(
+            metadata={"provider": self.provider.value, "text_length": len(text)}
         )
 
         if self.provider == ModelProvider.ANTHROPIC:
@@ -210,6 +258,8 @@ Here's the text: {text}
             ollama_base_url=ollama_base_url,
         )
 
+    observe()
+
     def process_text(self, input_url: str, model: Optional[str] = None) -> str:
         """
         Complete process of downloading and censoring text.
@@ -222,8 +272,67 @@ Here's the text: {text}
             str: Censored text
         """
         try:
+            # Update Langfuse with process start information
+            langfuse_context.update_current_observation(
+                input=input_url,
+                metadata={"provider": self.provider.value, "model": model},
+            )
+
             original_text = self.download_text(input_url)
+            censored_text = self.censor_text(original_text, model)
+
+            # Update Langfuse with final results
+            langfuse_context.update_current_observation(
+                output=censored_text,
+                metadata={
+                    "success": True,
+                    "input_length": len(original_text),
+                    "output_length": len(censored_text),
+                },
+            )
+
             return self.censor_text(original_text, model)
+
         except Exception as e:
+            # Log error to Langfuse
+            langfuse_context.update_current_observation(
+                metadata={
+                    "success": False,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            )
             self.logger.error(f"Error processing text: {str(e)}", exc_info=True)
             raise
+
+
+@observe()
+def check_ollama_status() -> bool:
+    """Check if Ollama server is running with Langfuse tracking"""
+    try:
+        response = requests.get("http://localhost:11434/api/version")
+
+        # Track the status check in Langfuse
+        langfuse_context.update_current_observation(
+            metadata={
+                "ollama_status": response.status_code == 200,
+                "ollama_version": (
+                    response.json().get("version")
+                    if response.status_code == 200
+                    else None
+                ),
+                "response_time": response.elapsed.total_seconds(),
+            }
+        )
+
+        return response.status_code == 200
+    except requests.RequestException as e:
+        # Track the error in Langfuse
+        langfuse_context.update_current_observation(
+            metadata={
+                "ollama_status": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
+        )
+        return False
