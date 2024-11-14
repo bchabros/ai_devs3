@@ -44,14 +44,14 @@ def transcribe_audio_files(api_key, input_dir, output_dir) -> None:
 
             with open(audio_path, "rb") as audio_file:
                 # Send to OpenAI for transaction
-                transcipt = client.audio.transcriptions.create(
+                transcript = client.audio.transcriptions.create(
                     model="whisper-1", file=audio_file
                 )
 
             # Add transcription to the collection
             transcription_entry = {
                 "file_name": audio_path.name,
-                "transcription": transcipt.text,
+                "transcription": transcript.text,
             }
             all_transcriptions["transcriptions"].append(transcription_entry)
 
