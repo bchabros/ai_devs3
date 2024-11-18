@@ -27,7 +27,16 @@ class ContentClassifier:
 
     @observe(as_type="generation")
     async def classify_text(self, text: str, filename: str = "unknown") -> str:
-        """Classify text using Claude API"""
+        """
+        Classifies the given text using a specified model and logs the processed information.
+
+        Args:
+            text: The text to be classified.
+            filename: The name of the file associated with the text, default is "unknown".
+
+        Returns:
+            The classification result of the input text.
+        """
         try:
             self.logger.debug(
                 f"[{filename}] Processing text input of length: {len(text)}"
@@ -68,7 +77,15 @@ class ContentClassifier:
             raise
 
     async def process_text_file(self, filepath: str) -> str:
-        """Process .txt files"""
+        """
+        Process a text file asynchronously and classify its content.
+
+        Args:
+            filepath (str): The path to the text file to be processed.
+
+        Returns:
+            str: The classification result of the text file content.
+        """
         try:
             filename = os.path.basename(filepath)
             self.logger.info(f"Processing text file: {filepath}")
@@ -86,7 +103,18 @@ class ContentClassifier:
 
     @observe()
     async def process_audio_file(self, filepath: str) -> str:
-        """Process .mp3 files using provided transcription script"""
+        """
+        Processes an audio file to generate a transcription and classify the text.
+
+        Args:
+            filepath (str): Path to the audio file to be processed.
+
+        Returns:
+            str: The classification result of the transcribed text.
+
+        Raises:
+            Exception: If an error occurs during the processing of the audio file.
+        """
         temp_dir = Path(filepath).parent / "temp_transcription"
         self.logger.info(f"Processing audio file: {filepath}")
 
@@ -114,7 +142,16 @@ class ContentClassifier:
 
     @observe(as_type="generation")
     async def process_image_file(self, filepath: str) -> str:
-        """Process image files using Claude/OpenAI for content classification"""
+        """
+        Processes an image file, sending it to a classification model via an API, and returns
+        the classification result.
+
+        Args:
+            filepath (str): The file path of the image to be processed.
+
+        Returns:
+            str: The classification result of the image or "error" if an exception occurs.
+        """
         try:
             self.logger.info(f"Processing image file: {filepath}")
             base64_image = self._encode_image(filepath)
@@ -168,7 +205,18 @@ class ContentClassifier:
 
     @staticmethod
     def _encode_image(image_path: str) -> str:
-        """Helper method to encode image to base64"""
+        """
+        Encodes an image to a base64 string.
+
+        Args:
+            image_path (str): Path to the image file to encode.
+
+        Returns:
+            str: The base64 encoded string of the image.
+
+        Raises:
+            Exception: If there is any issue in reading the image file or encoding it.
+        """
         try:
             with open(image_path, "rb") as image_file:
                 return base64.b64encode(image_file.read()).decode("utf-8")
@@ -178,7 +226,17 @@ class ContentClassifier:
 
     @observe()
     async def process_file(self, filepath: str) -> tuple[str, str]:
-        """Process a single file based on its extension"""
+        """
+        Processes files based on their extension and classifies them accordingly.
+
+        Args:
+            filepath (str): The path to the file that needs to be processed.
+
+        Returns:
+            tuple[str, str]: A tuple containing the file path and its
+            classification. In case of an error, the classification will be
+            "error".
+        """
         _, ext = os.path.splitext(filepath)
         self.logger.info(f"Processing file: {filepath} with extension: {ext}")
 
@@ -201,7 +259,19 @@ class ContentClassifier:
 
     @observe()
     async def classify_folder(self, folder_path: str) -> Dict[str, List[str]]:
-        """Process all files in a folder asynchronously"""
+        """
+        Classifies files in the specified folder into categories based on their content.
+        The files are classified asynchronously, and supported file types are .txt,
+        .mp3, and .png.
+
+        Args:
+            folder_path (str): The path of the folder containing files to classify.
+
+        Returns:
+            Dict[str, List[str]]: A dictionary with keys "people" and "hardware". Each key
+            maps to a list of filenames belonging to its category.
+
+        """
         self.logger.info(f"Starting folder classification: {folder_path}")
 
         files = [
