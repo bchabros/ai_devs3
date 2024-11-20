@@ -5,7 +5,7 @@ from langfuse import Langfuse
 
 from src.logger import logger
 from src.s_02.e_03 import ImageGenerator
-from src.poligon import send
+from src.send_task import send
 
 load_dotenv()
 

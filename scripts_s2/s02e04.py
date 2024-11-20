@@ -5,7 +5,7 @@ from langfuse import Langfuse
 from langfuse.decorators import observe
 
 from src.s_02.e_04 import ContentClassifier
-from src.poligon import send
+from src.send_task import send
 
 load_dotenv()
 langfuse = Langfuse(

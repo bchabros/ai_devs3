@@ -223,7 +223,7 @@ class DocumentProcessor:
     def send_results(self, result: dict):
         self.logger.info("Sending results")
         try:
-            from src.poligon import send
+            from src.send_task import send
             url = f"{self.base_url}report"
             task = "arxiv"
             response = send(url, task, self.api_key, result)

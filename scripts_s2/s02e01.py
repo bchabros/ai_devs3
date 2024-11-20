@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 
 from src.s_02.e_01 import transcribe_audio_files, query_claude_with_json_context
-from src.poligon import send
+from src.send_task import send
 
 if __name__ == "__main__":
 

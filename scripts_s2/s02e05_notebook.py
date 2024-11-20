@@ -368,7 +368,7 @@ result = {
 print(result)
 from dotenv import load_dotenv
 
-from src.poligon import send
+from src.send_task import send
 import os
 load_dotenv()
 

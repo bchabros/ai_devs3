@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.decorators import observe, langfuse_context
 
-from src.poligon import send
+from src.send_task import send
 
 from src.s_01.e_05 import CensoredData, ModelProvider, check_ollama_status
 
