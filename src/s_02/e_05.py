@@ -1,248 +1,254 @@
-import httpx
-import io
-import pickle
-import json
+import base64
 import os
-import logging
+import re
+import requests
+import whisper
+from bs4 import BeautifulSoup
+from collections import defaultdict
 from dotenv import load_dotenv
+from loguru import logger
 from openai import OpenAI
-from src.prompt.s02e05 import system_prompt_qa, system_prompt_image, system_prompt_parser
+from openai.types import ImagesResponse
+from typing import Any, Dict, List, Literal, Optional, Union
+from urllib.parse import urljoin
 
 
-class DocumentProcessor:
-    def __init__(self):
-        self._setup_logging()
-        load_dotenv()
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.base_url = os.getenv("CENTRALA_URL")
-        self.api_key = os.getenv("API_KEY")
-        self.processed_data = None
-        self.annotated_images = []
-        self.transcribed_audio = []
-        self.logger.info("DocumentProcessor initialized")
+load_dotenv()
+client = OpenAI()
+client.api_key = os.getenv("OPENAI_API_KEY")
 
-    def _setup_logging(self):
-        self.logger = logging.getLogger('DocumentProcessor')
-        self.logger.setLevel(logging.DEBUG)
 
-        # Console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(console_formatter)
+def generate_local_llm_response(
+    system_template: str,
+    human_template: str,
+    model: str = "llama2:7b",
+    stream: bool = False,
+    response_format: str = "json",
+    api_url: str = "http://localhost:11434/api/generate",
+) -> str:
+    payload = {
+        "model": model,
+        "prompt": human_template,
+        "stream": stream,
+        "format": response_format,
+        "system": system_template,
+    }
+    try:
+        response = requests.post(api_url, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        return result.get("response", result)
+    except requests.exceptions.RequestException as e:
+        return f"error: {str(e)}"
 
-        # File handler
-        file_handler = logging.FileHandler('document_processor.log')
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(file_formatter)
 
-        self.logger.addHandler(console_handler)
-        self.logger.addHandler(file_handler)
+def openai_create(
+    system_template: str,
+    human_template: str,
+    model: str = "gpt-4o-mini",
+    full_response: bool = False,
+) -> Union[Dict[str, Any], str]:
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_template},
+            {"role": "user", "content": human_template},
+        ],
+    )
+    return response if full_response else response.choices[0].message
 
-    def get_questions(self) -> dict:
-        self.logger.info("Fetching questions")
-        url = f"{self.base_url}data/{self.api_key}/arxiv.txt"
-        try:
-            response = httpx.get(url)
-            response.raise_for_status()
-            questions = response.text.split("\n")
-            result = {q.split("=")[0]: q.split("=")[1] for q in questions if "=" in q}
-            self.logger.debug(f"Retrieved {len(result)} questions")
-            return result
-        except Exception as e:
-            self.logger.error(f"Error fetching questions: {str(e)}")
-            raise
 
-    def get_document(self) -> str:
-        self.logger.info("Fetching document")
-        url = f"{self.base_url}dane/arxiv-draft.html"
-        try:
-            response = httpx.get(url)
-            response.raise_for_status()
-            self.logger.debug(f"Document retrieved, size: {len(response.text)} characters")
-            return response.text
-        except Exception as e:
-            self.logger.error(f"Error fetching document: {str(e)}")
-            raise
+def openai_vision_create(
+    system_template: str,
+    human_template: str,
+    images: List,
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.5,
+    full_response: bool = False,
+) -> Union[Dict[str, Any], str]:
+    content = [{"type": "text", "text": human_template}]
+    for image in images:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64, {base64.b64encode(image.read()).decode('utf-8')}"
+                },
+            }
+        )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_template},
+            {"role": "user", "content": content},
+        ],
+        temperature=temperature,
+    )
+    return response if full_response else response.choices[0].message
 
-    def extract_content_objects(self, document: str) -> list:
-        self.logger.info("Extracting content objects")
-        system_prompt = system_prompt_parser
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": document},
-                ],
-            )
-            content = response.choices[0].message.content
-            self.logger.debug(f"Raw API response content: {content}")
-            content = content.lstrip("```json\n").rstrip("\n```")
-            parsed_content = json.loads(content)
-            self.logger.debug(f"Extracted {len(parsed_content['content_objects'])} content objects")
-            return parsed_content["content_objects"]
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSON parsing error: {str(e)}")
-            self.logger.error(f"Problematic content: {content}")
-            raise
-        except Exception as e:
-            self.logger.error(f"Error extracting content objects: {str(e)}")
-            raise
 
-    def preprocess_data(self, data: list) -> list:
-        self.logger.info("Preprocessing data")
-        try:
-            for item in data:
-                if item["type"] in ["image", "audio"] and not item["content"].startswith("http"):
-                    item["content"] = f"{self.base_url}dane/{item['content']}"
-            self.logger.debug(f"Preprocessed {len(data)} items")
-            return data
-        except Exception as e:
-            self.logger.error(f"Error preprocessing data: {str(e)}")
-            raise
+def openai_image_create(
+    human_template: str,
+    model: str = "dall-e-3",
+    n: int = 1,
+    size: Literal[
+        "256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"
+    ] = "1024x1024",
+) -> ImagesResponse:
+    response = client.images.generate(
+        model=model, prompt=human_template, n=n, size=size
+    )
+    return response
 
-    def describe_image(self, image_url: str, image_caption: str) -> str:
-        self.logger.info(f"Describing image: {image_url}")
-        system_prompt = system_prompt_image
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                        {"type": "text", "text": f"Describe the image. The caption is {image_caption}."}
-                    ]},
-                ],
-            )
-            description = response.choices[0].message.content
-            self.logger.debug(f"Generated description: {description}")
-            return description
-        except Exception as e:
-            self.logger.error(f"Error describing image: {str(e)}")
-            raise
 
-    def transcribe_audio(self, audio_url: str) -> str:
-        self.logger.info(f"Transcribing audio: {audio_url}")
-        try:
-            audio = httpx.get(audio_url)
-            buf = io.BytesIO(audio.content)
-            buf.name = "file.mp3"
-            transcription = self.client.audio.transcriptions.create(
-                model="whisper-1",
-                file=buf,
-            )
-            self.logger.debug(f"Generated transcription: {transcription.text}")
-            return transcription.text
-        except Exception as e:
-            self.logger.error(f"Error transcribing audio: {str(e)}")
-            raise
+def whisper_transcribe_1(
+    path: str, model_name: str = "turbo", full_response: bool = False
+) -> Union[Dict[str, Any], str]:
+    model = whisper.load_model(model_name)
+    result = model.transcribe(path)
+    return result if full_response else result["text"]
 
-    def process_document(self):
-        self.logger.info("Starting document processing")
-        try:
-            document = self.get_document()
-            data = self.extract_content_objects(document)
-            self.processed_data = self.preprocess_data(data)
 
-            for item in self.processed_data:
-                if item["type"] == "image":
-                    description = self.describe_image(item["content"], item["caption"])
-                    self.annotated_images.append({"id": item["id"], "description": description})
-                elif item["type"] == "audio":
-                    transcription = self.transcribe_audio(item["content"])
-                    self.transcribed_audio.append({"id": item["id"], "transcription": transcription})
+def whisper_transcribe(path: str) -> str:
+    with open(path, "rb") as audio_file:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file
+        )
+    return transcript.text
 
-            self.logger.info("Document processing completed")
-        except Exception as e:
-            self.logger.error(f"Error in process_document: {str(e)}")
-            raise
 
-    def save_results(self):
-        self.logger.info("Saving results")
-        try:
-            with open("annotated_images.pkl", "wb") as f:
-                pickle.dump(self.annotated_images, f)
-            with open("transcribed_audio.pkl", "wb") as f:
-                pickle.dump(self.transcribed_audio, f)
-            with open("processed_data.pkl", "wb") as f:
-                pickle.dump(self.processed_data, f)
+def aidevs_send_answer(task: str, answer: Any) -> requests.Response:
+    apikey: str = os.getenv("API_KEY")
+    url: str = f"{os.environ.get('CENTRALA_URL')}report"
+    payload: Dict[str, Any] = {"task": task, "apikey": apikey, "answer": answer}
+    return requests.post(url, json=payload)
 
-            final_data = self.processed_data.copy()
-            for item in final_data:
-                if item["type"] == "image":
-                    for image in self.annotated_images:
-                        if item["id"] == image["id"]:
-                            item["content"] = image["description"]
-                elif item["type"] == "audio":
-                    for audio in self.transcribed_audio:
-                        if item["id"] == audio["id"]:
-                            item["content"] = audio["transcription"]
 
-            with open("final_data.pkl", "wb") as f:
-                pickle.dump(final_data, f)
-            self.logger.info("Results saved successfully")
-        except Exception as e:
-            self.logger.error(f"Error saving results: {str(e)}")
-            raise
+def transfer_webpage_to_markdown(url: str, output_dir: str, markdown_name: str) -> None:
+    try:
+        # Ensure the output directory exists
+        os.makedirs(output_dir, exist_ok=True)
 
-    def answer_question(self, question: str) -> str:
-        self.logger.info(f"Answering question: {question}")
-        system_prompt = system_prompt_qa
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"This is the question: {question}"},
-                    {"role": "user", "content": f"This is the data: {self.processed_data}"},
-                ],
-                temperature=0.1
-            )
-            answer = response.choices[0].message.content
-            self.logger.debug(f"Generated answer: {answer}")
-            return answer
-        except Exception as e:
-            self.logger.error(f"Error answering question: {str(e)}")
-            raise
+        # Fetch the HTML content of the page
+        response: requests.Response = requests.get(url)
+        response.raise_for_status()
+        html_content: str = response.text
 
-    def process_questions(self) -> dict:
-        self.logger.info("Processing questions")
-        try:
-            questions = self.get_questions()
-            answers = [(q_id, self.answer_question(q)) for q_id, q in questions.items()]
-            result = {question_id: answer for question_id, answer in answers}
-            self.logger.debug(f"Processed {len(result)} questions")
-            return result
-        except Exception as e:
-            self.logger.error(f"Error processing questions: {str(e)}")
-            raise
+        # Parse the HTML content with BeautifulSoup
+        soup: BeautifulSoup = BeautifulSoup(html_content, "html.parser")
 
-    def send_results(self, result: dict):
-        self.logger.info("Sending results")
-        try:
-            from src.send_task import send
-            url = f"{self.base_url}report"
-            task = "arxiv"
-            response = send(url, task, self.api_key, result)
-            self.logger.debug(f"Send results response: {response}")
-            return response
-        except Exception as e:
-            self.logger.error(f"Error sending results: {str(e)}")
-            raise
+        # Initialize Markdown content
+        markdown_content: list[str] = []
 
-    def run(self):
-        self.logger.info("Starting document processor run")
-        try:
-            self.process_document()
-            self.save_results()
-            results = self.process_questions()
-            self.logger.info(results)
-            response = self.send_results(results)
-            self.logger.info("Document processor run completed successfully")
-            return response
-        except Exception as e:
-            self.logger.error(f"Error in run: {str(e)}")
-            raise
+        # Replace images
+        img: Optional[BeautifulSoup.Tag]
+        for img in soup.find_all("img"):
+            img_url: str = urljoin(url, img.get("src", ""))
+            img_name: str = os.path.basename(img_url)
+            download_file_from_url(img_url, output_dir)
+            img.replace_with(f"<img>{img_name}</img>")
+
+        # Replace MP3 links
+        link: Optional[BeautifulSoup.Tag]
+        for link in soup.find_all(
+            "a", href=lambda href: href and href.endswith(".mp3")
+        ):
+            mp3_url: str = urljoin(url, link.get("href", ""))
+            mp3_name: str = os.path.basename(mp3_url)
+            download_file_from_url(mp3_url, output_dir)
+            link.replace_with(f"<audio>{mp3_name}</audio>")
+
+        # Extract and append the modified HTML content as Markdown
+        markdown_content.append(soup.get_text())
+
+        # Save the Markdown content to a file
+        markdown_file: str = os.path.join(output_dir, markdown_name)
+        with open(markdown_file, "w", encoding="utf-8") as file:
+            file.write("\n".join(markdown_content))
+
+        logger.info(f"Markdown content saved to {markdown_file}")
+    except Exception as e:
+        logger.error(f"Error occurred: {e}")
+
+
+def replace_placeholders_in_text(
+    text: str,
+    image_descriptions: Dict[str, str],
+    audio_transcriptions: Dict[str, str],
+) -> str:
+    def _replace_image_placeholder(match):
+        image_name = match.group(1)
+        description = image_descriptions.get(image_name, "")
+        return f"<img>{description}</img>" if description else match.group(0)
+
+    def _replace_audio_placeholder(match):
+        audio_name = match.group(1)
+        transcription = audio_transcriptions.get(audio_name, "")
+        return f"<mp3>{transcription}</mp3>" if transcription else match.group(0)
+
+    image_pattern = r"<img>(.+?)</img>"
+    audio_pattern = r"<audio>(.+?)</audio>"
+
+    text = re.sub(image_pattern, _replace_image_placeholder, text)
+    text = re.sub(audio_pattern, _replace_audio_placeholder, text)
+
+    return text
+
+
+def download_file_from_url(file_url: str, output_dir: str) -> None:
+    """
+    Downloads a file from the given URL and saves it to the specified directory.
+    Args:
+        file_url (str): The URL of the file to download.
+        output_dir (str): Directory to save the downloaded file.
+    Returns:
+        None
+    """
+    try:
+        # Fetch the file
+        response: requests.Response = requests.get(file_url, stream=True)
+        response.raise_for_status()
+
+        # Extract the file name from the URL
+        file_name: str = os.path.basename(file_url)
+        file_path: str = os.path.join(output_dir, file_name)
+
+        # Write the file content to the output directory
+        with open(file_path, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        logger.info(f"Downloaded: {file_name}")
+    except Exception as e:
+        logger.warning(f"Failed to download {file_url}: {e}")
+
+
+def group_files_by_type(
+    directory: str,
+    file_types: Dict[str, str] = {".png": "Images", ".mp3": "Audio", ".txt": "Text"},
+) -> Dict[str, List[str]]:
+    """
+    Groups files in the given directory by their type (.png, .mp3, .txt).
+    Args:
+        directory (str): The path to the directory to scan.
+        file_types (Dict[str, str]): A dictionary mapping file extensions (e.g., ".png") to category names
+            (e.g., "Images"). Default is {".png": "Images", ".mp3": "Audio", ".txt": "Text"}.
+    Returns:
+        Dict[str, List[str]]: A dictionary where keys are file types and values are lists of file paths.
+    """
+    grouped_files = defaultdict(list)
+
+    for file_name in os.listdir(directory):
+        file_path = os.path.join(directory, file_name)
+
+        if os.path.isfile(file_path):
+            _, ext = os.path.splitext(file_name)
+            if ext in file_types:
+                grouped_files[file_types[ext]].append(file_name)
+
+    return grouped_files
+
+
+def extract_answer(text: str) -> Optional[str]:
+    match = re.search(r"<ANSWER>(.*?)</ANSWER>", text, re.DOTALL)
+    return match.group(1).strip() if match else None
