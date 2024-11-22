@@ -9,6 +9,8 @@ import logging
 
 from openai import OpenAI
 
+from src.prompt.s02e01 import SYSTEM_PROMPT
+
 logging.basicConfig(
     level=logging.INFO,  # Set the logging level
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -88,14 +90,7 @@ def query_claude_with_json_context(json_path: str, question: str) -> str:
     )
 
     # Create the message for Claude
-    system_prompt = """
-       You are an assistant tasked with analyzing transcribed audio content and answering questions based on that content.
-       You should focus specifically on finding information about locations, institutions, and people mentioned in the transcriptions.
-       Please provide specific and precise answers, citing which file the information came from when possible.
-       Remember that witness statements may be contradictory, some may be wrong, and others may answer in rather bizarre ways.
-       The street name is not mentioned in the transcript. You must use the model's internal knowledge to get the answer.
-       As an answer just give only street name.
-       """
+    system_prompt = SYSTEM_PROMPT
 
     user_message = f"""
        Here are the transcriptions of several audio files:

@@ -10,7 +10,7 @@ from pinecone import Pinecone
 import os
 from dotenv import load_dotenv
 
-from src.prompt.s02e03 import QA_PROMPT_TEMPLATE
+from src.prompt.s03e02 import QA_PROMPT_TEMPLATE
 
 
 class DocumentRAG:

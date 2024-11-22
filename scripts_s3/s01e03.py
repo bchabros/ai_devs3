@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from src.s_03.e_01 import process_text_files, use_llm, combine_matching_files
 from src.send_task import send
-from src.prompt.s01e03 import NAMES_PROMPT, KEYWORD_PROMPT
+from src.prompt.s03e01 import NAMES_PROMPT, KEYWORD_PROMPT
 
 
 if __name__ == "__main__":
