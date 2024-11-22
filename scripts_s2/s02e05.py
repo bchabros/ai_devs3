@@ -17,7 +17,9 @@ from src.s_02.e_05 import (
 
 def run():
     url_article: str = f"{os.getenv('CENTRALA_URL')}dane/arxiv-draft.html"
-    url_questions: str = f"{os.getenv('CENTRALA_URL')}data/{os.getenv('API_KEY')}/arxiv.txt"
+    url_questions: str = (
+        f"{os.getenv('CENTRALA_URL')}data/{os.getenv('API_KEY')}/arxiv.txt"
+    )
     output_directory: str = "S02E05"
     markdown_name: str = "S02E05_webpage"
     system_template_vision = SYSTEM_TEMPLATE_VISION
@@ -71,9 +73,7 @@ def run():
         answers[question_id] = answer
     logger.debug(f"FINAL ANSWERS: {answers}")
 
-    response_task = aidevs_send_answer(
-        task="arxiv", answer=answers
-    )
+    response_task = aidevs_send_answer(task="arxiv", answer=answers)
     if response_task.status_code == 200:
         logger.success(f"Request successful! Response:, {response_task.content}")
     else:

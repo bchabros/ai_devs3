@@ -14,9 +14,17 @@ from src.prompt.s02e03 import QA_PROMPT_TEMPLATE
 
 
 class DocumentRAG:
-    def __init__(self, documents_path, index_name, refresh=False, chunk_size=1000,
-                 chunk_overlap=200, model_name="gpt-4o-mini", temperature=0,
-                 embedding_model="text-embedding-3-small"):
+    def __init__(
+        self,
+        documents_path,
+        index_name,
+        refresh=False,
+        chunk_size=1000,
+        chunk_overlap=200,
+        model_name="gpt-4o-mini",
+        temperature=0,
+        embedding_model="text-embedding-3-small",
+    ):
         """
         Initialize the Document QA System
 
@@ -48,8 +56,7 @@ class DocumentRAG:
     def _initialize_embeddings(self):
         """Initialize OpenAI embeddings"""
         return OpenAIEmbeddings(
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            model=self.embedding_model
+            openai_api_key=os.getenv("OPENAI_API_KEY"), model=self.embedding_model
         )
 
     def _load_documents(self, file_pattern="*.txt"):
@@ -60,8 +67,7 @@ class DocumentRAG:
     def _split_documents(self, docs):
         """Split documents into smaller chunks"""
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap
+            chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
         )
         return text_splitter.split_documents(docs)
 
@@ -82,18 +88,17 @@ class DocumentRAG:
                 docs = self._load_documents()
                 split_docs = self._split_documents(docs)
                 return PineconeVectorStore.from_documents(
-                    split_docs,
-                    self.embeddings,
-                    index_name=self.index_name
+                    split_docs, self.embeddings, index_name=self.index_name
                 )
             else:
                 stats = index.describe_index_stats()
                 if stats.total_vector_count == 0:
-                    raise ValueError(f"Index '{self.index_name}' is empty. Please use refresh=True to populate it.")
+                    raise ValueError(
+                        f"Index '{self.index_name}' is empty. Please use refresh=True to populate it."
+                    )
 
                 return PineconeVectorStore(
-                    index_name=self.index_name,
-                    embedding=self.embeddings
+                    index_name=self.index_name, embedding=self.embeddings
                 )
 
         except Exception as e:
@@ -101,32 +106,28 @@ class DocumentRAG:
                 docs = self._load_documents()
                 split_docs = self._split_documents(docs)
                 return PineconeVectorStore.from_documents(
-                    split_docs,
-                    self.embeddings,
-                    index_name=self.index_name
+                    split_docs, self.embeddings, index_name=self.index_name
                 )
             else:
-                raise ValueError(f"Index '{self.index_name}' does not exist. Please use refresh=True to create it.")
+                raise ValueError(
+                    f"Index '{self.index_name}' does not exist. Please use refresh=True to create it."
+                )
 
     def _setup_qa_chain_with_filter(self):
         """Set up the QA chain with document filtering"""
-        llm = ChatOpenAI(
-            model_name=self.model_name,
-            temperature=self.temperature
-        )
+        llm = ChatOpenAI(model_name=self.model_name, temperature=self.temperature)
 
         compressor = LLMChainExtractor.from_llm(llm=llm)
 
         compression_retriever = ContextualCompressionRetriever(
             base_retriever=self.vector_store.as_retriever(search_kwargs={"k": 4}),
-            base_compressor=compressor
+            base_compressor=compressor,
         )
 
         qa_prompt_template = QA_PROMPT_TEMPLATE
 
         qa_prompt = PromptTemplate(
-            template=qa_prompt_template,
-            input_variables=["context", "question"]
+            template=qa_prompt_template, input_variables=["context", "question"]
         )
 
         return RetrievalQA.from_chain_type(
@@ -136,22 +137,18 @@ class DocumentRAG:
             return_source_documents=True,
             chain_type_kwargs={
                 "prompt": qa_prompt,
-            }
+            },
         )
 
     def _setup_qa_chain(self):
         """Set up the QA chain with specified LLM and vector store"""
-        llm = ChatOpenAI(
-            model_name=self.model_name,
-            temperature=self.temperature
-        )
+        llm = ChatOpenAI(model_name=self.model_name, temperature=self.temperature)
 
         # Create a custom prompt template that includes metadata
         prompt_template = QA_PROMPT_TEMPLATE
 
         prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
+            template=prompt_template, input_variables=["context", "question"]
         )
 
         return RetrievalQA.from_chain_type(
@@ -161,26 +158,24 @@ class DocumentRAG:
             return_source_documents=True,  # This will return source documents along with the answer
             chain_type_kwargs={
                 "prompt": prompt,
-            }
+            },
         )
 
     def query(self, query_text):
         """Execute a query and return results with source documents"""
         result = self.qa_chain.invoke(query_text)
 
-        answer = result['result']
-        source_docs = result['source_documents']
+        answer = result["result"]
+        source_docs = result["source_documents"]
 
         print("\nAnswer:", answer)
 
         unique_sources = set()
         print("\nSources used:")
         for doc in source_docs:
-            source_file = os.path.basename(doc.metadata['source'])
+            source_file = os.path.basename(doc.metadata["source"])
             if source_file not in unique_sources:
                 print(f"- {source_file}")
                 unique_sources.add(source_file)
 
         return result
-
-
