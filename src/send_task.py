@@ -70,13 +70,13 @@ def send_s03e04(
     return res.json()
 
 
-load_dotenv()
-res = send_s03e04("https://centrala.ag3nts.org/people ",
-                  os.getenv("API_KEY"),
-                  "ALEKSANDER")
-print(res)
-
-res = send_s03e04("https://centrala.ag3nts.org/places] ",
-                  os.getenv("API_KEY"),
-                  "KRAKOW")
-print(res)
+# load_dotenv()
+# res = send_s03e04("https://centrala.ag3nts.org/people ",
+#                   os.getenv("API_KEY"),
+#                   "AZAZEL")
+# print(res)
+#
+# res = send_s03e04("https://centrala.ag3nts.org/places] ",
+#                   os.getenv("API_KEY"),
+#                   "ELBLAG")
+# print(res)
