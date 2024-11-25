@@ -1,7 +1,4 @@
-import os
-
 import httpx
-from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import List, Any, Dict
 
@@ -21,6 +18,11 @@ class QueryRequest(BaseModel):
 class S03E03Request(BaseModel):
     apikey: str
     query: str
+
+
+class QueryResponse(BaseModel):
+    reply: Any
+    error: str
 
 
 def send(
@@ -70,13 +72,10 @@ def send_s03e04(
     return res.json()
 
 
-# load_dotenv()
-# res = send_s03e04("https://centrala.ag3nts.org/people ",
-#                   os.getenv("API_KEY"),
-#                   "AZAZEL")
-# print(res)
-#
-# res = send_s03e04("https://centrala.ag3nts.org/places] ",
-#                   os.getenv("API_KEY"),
-#                   "ELBLAG")
-# print(res)
+def send_query(url: str, query: str, apikey: str):
+    """Send prompt to Database"""
+    data = QueryRequest(query=query,
+                        task="database",
+                        apikey=apikey)
+    res = httpx.post(url, data=data.model_dump_json())
+    return QueryResponse(**res.json())
